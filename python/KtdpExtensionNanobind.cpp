@@ -1,4 +1,4 @@
-//===- KtdpExtensionNanobind.cpp - Extension module ---------------------===//
+//===- KTDPExtensionNanobind.cpp - Extension module ---------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,7 +6,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "Ktdp-c/Dialects.h"
 #include "mlir-c/Dialect/Arith.h"
 #include "mlir-c/Dialect/Func.h"
 #include "mlir-c/Dialect/Linalg.h"
@@ -18,13 +17,15 @@
 #include "mlir/Bindings/Python/Nanobind.h"
 #include "mlir/Bindings/Python/NanobindAdaptors.h"
 
+#include "ktir-c/Dialect/KTDP.h"
+
 namespace nb = nanobind;
 
 struct PyAccessTileType
     : mlir::python::MLIR_BINDINGS_PYTHON_DOMAIN::PyConcreteType<PyAccessTileType, mlir::python::mlir_ktdp::PyShapedType> {
-  static constexpr IsAFunctionTy isaFunction = mlirKtdpTypeIsAAccessTileType;
+  static constexpr IsAFunctionTy isaFunction = mlirKTDPTypeIsAAccessTileType;
   static constexpr GetTypeIDFunctionTy getTypeIdFunction =
-      mlirKtdpAccessTileTypeGetTypeID;
+      mlirKTDPAccessTileTypeGetTypeID;
   static constexpr const char *pyClassName = "AccessTileType";
   using PyConcreteType::PyConcreteType;
 
@@ -35,7 +36,7 @@ struct PyAccessTileType
            mlir::python::MLIR_BINDINGS_PYTHON_DOMAIN::DefaultingPyMlirContext context) {
           return PyAccessTileType(
               context->getRef(),
-              mlirKtdpAccessTileTypeGet(
+              mlirKTDPAccessTileTypeGet(
                   shape.size(), shape.data(),
                   elementType));
         },
@@ -46,9 +47,9 @@ struct PyAccessTileType
 
 struct PyRuntimeArgType
     : mlir::python::MLIR_BINDINGS_PYTHON_DOMAIN::PyConcreteType<PyRuntimeArgType, mlir::python::mlir_ktdp::PyType> {
-  static constexpr IsAFunctionTy isaFunction = mlirKtdpTypeIsARuntimeArgType;
+  static constexpr IsAFunctionTy isaFunction = mlirKTDPTypeIsARuntimeArgType;
   static constexpr GetTypeIDFunctionTy getTypeIdFunction =
-      mlirKtdpRuntimeArgTypeGetTypeID;
+      mlirKTDPRuntimeArgTypeGetTypeID;
   static constexpr const char *pyClassName = "RuntimeArgType";
   using PyConcreteType::PyConcreteType;
 
@@ -60,7 +61,7 @@ struct PyRuntimeArgType
            mlir::python::MLIR_BINDINGS_PYTHON_DOMAIN::DefaultingPyMlirContext context) {
           return PyRuntimeArgType(
               context->getRef(),
-              mlirKtdpRuntimeArgTypeGet(
+              mlirKTDPRuntimeArgTypeGet(
                   context->get(), underlyingType,
                   granularity.value_or(-1),
                   upperbound.value_or(-1)));
@@ -70,14 +71,14 @@ struct PyRuntimeArgType
         nb::arg("upperbound").none() = nb::none(),
         nb::arg("context").none() = nb::none());
     c.def_prop_ro("underlying_type", [](PyRuntimeArgType &self) {
-      return mlirKtdpRuntimeArgTypeGetUnderlyingType(self);
+      return mlirKTDPRuntimeArgTypeGetUnderlyingType(self);
     });
     c.def_prop_ro("granularity", [](PyRuntimeArgType &self) -> std::optional<int64_t> {
-      int64_t v = mlirKtdpRuntimeArgTypeGetGranularity(self);
+      int64_t v = mlirKTDPRuntimeArgTypeGetGranularity(self);
       return v >= 0 ? std::optional<int64_t>(v) : std::nullopt;
     });
     c.def_prop_ro("upperbound", [](PyRuntimeArgType &self) -> std::optional<int64_t> {
-      int64_t v = mlirKtdpRuntimeArgTypeGetUpperbound(self);
+      int64_t v = mlirKTDPRuntimeArgTypeGetUpperbound(self);
       return v >= 0 ? std::optional<int64_t>(v) : std::nullopt;
     });
   }

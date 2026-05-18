@@ -40,7 +40,7 @@ declare_mlir_python_extension(KtdpPythonSources.NanobindExtension
   MODULE_NAME _ktdpDialectsNanobind
   ADD_TO_PARENT KtdpPythonSources
   SOURCES
-        KtdpExtensionNanobind.cpp
+        KTDPExtensionNanobind.cpp
   PRIVATE_LINK_LIBS
     LLVMSupport
   EMBED_CAPI_LINK_LIBS
@@ -52,7 +52,7 @@ declare_mlir_python_extension(KtdpPythonSources.NanobindExtension
     MLIRCAPISCF
     MLIRCAPITensor
     MLIRCAPITransforms
-    KtdpCAPI
+    KTDPCAPI
 )
 
 

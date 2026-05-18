@@ -1,1 +1,1 @@
-add_subdirectory(Ktdp)
+add_subdirectory(ktir)

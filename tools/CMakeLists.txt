@@ -1,1 +1,2 @@
-add_subdirectory(ktir-opt)
+add_subdirectory(ktdp-lsp-server)
+add_subdirectory(ktdp-opt)

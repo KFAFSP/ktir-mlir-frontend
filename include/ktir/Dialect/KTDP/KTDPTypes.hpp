@@ -1,0 +1,117 @@
+//===- KTDPTypes.hpp - KTDP dialect types public header ---------*- C++ -*-===//
+//
+//===----------------------------------------------------------------------===//
+
+#ifndef KTIR_DIALECT_KTDP_KTDPTYPES_HPP
+#define KTIR_DIALECT_KTDP_KTDPTYPES_HPP
+
+#include "mlir/IR/BuiltinTypeInterfaces.h"
+#include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/Types.h"
+
+#include "ktir/Dialect/KTDP/KTDPDialect.hpp"
+
+#define GET_TYPEDEF_CLASSES
+#include "ktir/Dialect/KTDP/KTDPTypes.hpp.inc"
+
+namespace mlir {
+namespace ktdp {
+
+//===----------------------------------------------------------------------===//
+// AccessTileType::Builder
+//===----------------------------------------------------------------------===//
+
+class AccessTileType::Builder {
+public:
+  explicit Builder(AccessTileType other)
+      : shape(other.getShape()), elementType(other.getElementType()) {}
+
+  Builder(ArrayRef<int64_t> shape, Type elementType)
+      : shape(shape), elementType(elementType) {}
+
+  Builder &setShape(ArrayRef<int64_t> newShape) {
+    shape = newShape;
+    return *this;
+  }
+
+  Builder &setElementType(Type newElementType) {
+    elementType = newElementType;
+    return *this;
+  }
+
+  Builder &dropDim(unsigned pos) {
+    assert(pos < shape.size() && "dimension index overflow");
+    shape.erase(pos);
+    return *this;
+  }
+
+  Builder &insertDim(int64_t val, unsigned pos) {
+    assert(pos <= shape.size() && "dimension index overflow");
+    shape.insert(pos, val);
+    return *this;
+  }
+
+  operator AccessTileType() {
+    return AccessTileType::get(shape, elementType);
+  }
+
+private:
+  CopyOnWriteArrayRef<int64_t> shape;
+  Type elementType;
+};
+
+//===----------------------------------------------------------------------===//
+// RuntimeArgType::Builder
+//===----------------------------------------------------------------------===//
+
+class RuntimeArgType::Builder {
+public:
+  explicit Builder(RuntimeArgType other)
+      : underlyingType(other.getUnderlyingType()),
+        granularity(other.getGranularity()),
+        upperbound(other.getUpperbound()) {}
+
+  Builder(Type underlyingType, std::optional<int64_t> granularity = std::nullopt,
+          std::optional<int64_t> upperbound = std::nullopt)
+      : underlyingType(underlyingType), granularity(granularity),
+        upperbound(upperbound) {}
+
+  Builder &setUnderlyingType(Type newUnderlyingType) {
+    underlyingType = newUnderlyingType;
+    return *this;
+  }
+
+  Builder &setGranularity(std::optional<int64_t> newGranularity) {
+    granularity = newGranularity;
+    return *this;
+  }
+
+  Builder &setUpperbound(std::optional<int64_t> newUpperbound) {
+    upperbound = newUpperbound;
+    return *this;
+  }
+
+  Builder &clearGranularity() {
+    granularity = std::nullopt;
+    return *this;
+  }
+
+  Builder &clearUpperbound() {
+    upperbound = std::nullopt;
+    return *this;
+  }
+
+  operator RuntimeArgType() {
+    return RuntimeArgType::get(underlyingType, granularity, upperbound);
+  }
+
+private:
+  Type underlyingType;
+  std::optional<int64_t> granularity;
+  std::optional<int64_t> upperbound;
+};
+
+} // namespace ktdp
+} // namespace mlir
+
+#endif // KTIR_DIALECT_KTDP_KTDPTYPES_HPP
