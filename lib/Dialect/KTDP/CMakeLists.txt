@@ -16,4 +16,10 @@ add_ktir_dialect_library(KTIRKTDPDialect
   LINK_LIBS PUBLIC
     MLIRIR
     MLIRInferTypeOpInterface
+    MLIRAffineDialect
+    MLIRMemRefDialect
+    MLIRTensorDialect
+    MLIRSCFDialect
+    MLIRFuncDialect
+    MLIRArithDialect
 )
