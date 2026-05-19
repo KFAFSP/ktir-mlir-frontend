@@ -51,7 +51,21 @@ endfunction()
 
 macro(add_ktir_executable name)
   add_llvm_executable(${name} ${ARGN})
-  # TODO: Consider install instructions.
+
+  if(KTIR_BUILD_TOOLS)
+    get_target_export_arg(${name} KTIR export_to_ktirtargets)
+    install(TARGETS ${name}
+      COMPONENT ${name}
+      ${export_to_ktirtargets}
+      RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
+
+    if(NOT CMAKE_CONFIGURATION_TYPES)
+      add_llvm_install_targets(install-${name}
+        DEPENDS ${name}
+        COMPONENT ${name})
+    endif()
+    set_property(GLOBAL APPEND PROPERTY KTIR_EXPORTS ${name})
+  endif()
 endmacro()
 
 macro(add_ktir_tool name)
@@ -64,13 +78,13 @@ endmacro()
 
 function(add_ktir_library name)
   add_mlir_library(${ARGV} DISABLE_INSTALL)
-  # TODO: Consider install instructions.
+  add_ktir_library_install(${name})
 endfunction()
 
 function(add_ktir_public_c_api_library name)
   add_mlir_public_c_api_library(${ARGV} DISABLE_INSTALL)
+  add_ktir_library_install(${name})
   add_dependencies(ktir-capi ${name})
-  # TODO: Consider install instructions.
 endfunction()
 
 function(add_ktir_dialect_library name)
@@ -82,3 +96,25 @@ function(add_ktir_conversion_library name)
   set_property(GLOBAL APPEND PROPERTY KTIR_CONVERSION_LIBS ${name})
   add_ktir_library(${ARGV} DEPENDS ktir-headers)
 endfunction()
+
+function(add_ktir_library_install name)
+  if (NOT LLVM_INSTALL_TOOLCHAIN_ONLY)
+    get_target_export_arg(${name} KTIR export_to_ktirtargets UMBRELLA ktir-libraries)
+    install(TARGETS ${name}
+      COMPONENT ${name}
+      ${export_to_ktirtargets}
+      LIBRARY DESTINATION lib${LLVM_LIBDIR_SUFFIX}
+      ARCHIVE DESTINATION lib${LLVM_LIBDIR_SUFFIX}
+      RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
+      OBJECTS DESTINATION lib${LLVM_LIBDIR_SUFFIX})
+
+    if (NOT LLVM_ENABLE_IDE)
+      add_llvm_install_targets(install-${name}
+                              DEPENDS ${name}
+                              COMPONENT ${name})
+    endif()
+  set_property(GLOBAL APPEND PROPERTY KTIR_LIBS ${name})
+  endif()
+  set_property(GLOBAL APPEND PROPERTY KTIR_EXPORTS ${name})
+endfunction()
+
