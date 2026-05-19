@@ -64,7 +64,7 @@ add_mlir_python_common_capi_library(KtdpPythonCAPI
   INSTALL_COMPONENT KtdpPythonModules
   INSTALL_DESTINATION "${MLIR_BINDINGS_PYTHON_INSTALL_PREFIX}/_mlir_libs"
   OUTPUT_DIRECTORY "${MLIR_BINARY_DIR}/${MLIR_BINDINGS_PYTHON_INSTALL_PREFIX}/_mlir_libs"
-  RELATIVE_INSTALL_ROOT "../../../../.."
+  RELATIVE_INSTALL_ROOT "../../../.."
   DECLARED_SOURCES
     KtdpPythonSources
     MLIRPythonSources.Core
