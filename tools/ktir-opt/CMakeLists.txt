@@ -11,9 +11,6 @@ add_ktir_tool(ktir-opt
   SUPPORT_PLUGINS
 )
 target_link_libraries(ktir-opt PRIVATE
-  # NOTE: This is _not_ part of libMLIR.so!
-  MLIRMlirOptMain
-
   ${_dialect_libs}
   ${_extension_libs}
   ${_conversion_libs}
@@ -27,3 +24,6 @@ mlir_target_link_libraries(ktir-opt PRIVATE
 )
 llvm_update_compile_flags(ktir-opt)
 export_executable_symbols_for_plugins(ktir-opt)
+
+get_target_property(_link ktir-opt LINK_LIBRARIES)
+message(${_link})
