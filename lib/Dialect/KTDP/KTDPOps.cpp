@@ -19,10 +19,15 @@
 // This file defines the operations in the KTDP operation set.
 //
 //===----------------------------------------------------------------------===//
-#include "ktir/Dialect/KTDP/KTDP.h"
+#include <llvm/ADT/SmallVector.h>
+#include <llvm/Support/LogicalResult.h>
+#include <mlir/IR/BuiltinAttributes.h>
+#include <mlir/IR/BuiltinTypeInterfaces.h>
+#include <mlir/IR/OpImplementation.h>
 
-#include "ktir/Dialect/KTDP/KTDPTypes.h"
+#include "ktir/Dialect/KTDP/KTDP.h"
 #include "ktir/Dialect/KTDP/KTDPInterTileHelpers.h"
+#include "ktir/Dialect/KTDP/KTDPTypes.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "mlir/Analysis/FlatLinearValueConstraints.h"
@@ -491,11 +496,11 @@ void ConstructIndirectAccessTilesOp::build(
     bodyBlock.addArgument(builder.getIndexType(), builder.getUnknownLoc());
   }
 
-  result.addAttribute(
-      getOperandSegmentSizesAttrName(result.name),
-      builder.getDenseI32ArrayAttr({1, static_cast<int32_t>(indirect_memrefs.size()),
-                                    static_cast<int32_t>(captured_variables.size()),
-                                    static_cast<int32_t>(symbol_operands.size())}));
+  result.addAttribute(getOperandSegmentSizesAttrName(result.name),
+                      builder.getDenseI32ArrayAttr(
+                          {1, static_cast<int32_t>(indirect_memrefs.size()),
+                           static_cast<int32_t>(captured_variables.size()),
+                           static_cast<int32_t>(symbol_operands.size())}));
 
   result.addAttribute(getPerDimSubscriptKindsAttrStrName(),
                       per_dim_subscript_kinds);
@@ -727,9 +732,9 @@ void ConstructIndirectAccessTilesOp::build(
 
   if (memref_types.size() != static_cast<unsigned>(num_indirect_dims) + 1) {
     return parser.emitError(parser.getNameLoc())
-           << "expected " << (num_indirect_dims + 1)
-           << " types (base + " << num_indirect_dims
-           << " indirect memrefs), but got " << memref_types.size();
+           << "expected " << (num_indirect_dims + 1) << " types (base + "
+           << num_indirect_dims << " indirect memrefs), but got "
+           << memref_types.size();
   }
 
   // Resolve the base memref and associate with type.
@@ -784,7 +789,8 @@ void ConstructIndirectAccessTilesOp::build(
   // Update operand segment sizes to include symbol_operands
   result.addAttribute(getOperandSegmentSizesAttrName(result.name),
                       builder.getDenseI32ArrayAttr(
-                          {1, num_indirect_dims, static_cast<int32_t>(captured_variables.size()),
+                          {1, num_indirect_dims,
+                           static_cast<int32_t>(captured_variables.size()),
                            static_cast<int32_t>(symbol_operands.size())}));
 
   // add result type
@@ -1046,7 +1052,8 @@ LogicalResult ConstructIndirectAccessTilesOp::verify() {
 
 LogicalResult GetComputeTileIdOp::verify() {
   if (getNumResults() < 1)
-    return emitOpError("must return at least one index (num tile-grid dims >= 1)");
+    return emitOpError(
+        "must return at least one index (num tile-grid dims >= 1)");
   for (auto res : getResults())
     if (!mlir::isa<IndexType>(res.getType()))
       return emitOpError("all results must be IndexType");
@@ -1057,23 +1064,123 @@ LogicalResult GetComputeTileIdOp::verify() {
 // ConstructMemoryViewOp
 //===----------------------------------------------------------------------===//
 
+auto ConstructMemoryViewOp::parse(OpAsmParser& parser, OperationState& state)
+    -> ParseResult {
+  // ssa-id
+  OpAsmParser::UnresolvedOperand offset_operand;
+  if (parser.parseOperand(offset_operand)) {
+    return failure();
+  }
+
+  // `,` `sizes````:` `[` [ssa-id | int] { `,` (ssa-id | int) } `]`
+  SmallVector<OpAsmParser::UnresolvedOperand> dynamic_sizes;
+  DenseI64ArrayAttr static_sizes;
+  if (parser.parseComma() || parser.parseKeyword("sizes") ||
+      parser.parseColon() ||
+      parseDynamicIndexList(parser, dynamic_sizes, static_sizes)) {
+    return failure();
+  }
+
+  // `,` `strides````:` `[` [ssa-id | int] { `,` (ssa-id | int) } `]`
+  SmallVector<OpAsmParser::UnresolvedOperand> dynamic_strides;
+  DenseI64ArrayAttr static_strides;
+  if (parser.parseComma() || parser.parseKeyword("strides") ||
+      parser.parseColon() ||
+      parseDynamicIndexList(parser, dynamic_sizes, static_strides)) {
+    return failure();
+  }
+
+  // attr-dict
+  if (parser.parseOptionalAttrDict(state.attributes)) {
+    return failure();
+  }
+
+  // `:` type($result)
+  MemRefType result_type;
+  if (parser.parseColon()) {
+    return failure();
+  }
+  const auto type_loc = parser.getCurrentLocation();
+  if (parser.parseType(result_type)) {
+    return failure();
+  }
+  state.addTypes(result_type);
+
+  const auto index_type = parser.getBuilder().getIndexType();
+  if (parser.resolveOperand(offset_operand, index_type, state.operands) ||
+      parser.resolveOperands(dynamic_sizes, index_type, state.operands) ||
+      parser.resolveOperands(dynamic_strides, index_type, state.operands)) {
+    return failure();
+  }
+
+  auto& props = state.getOrAddProperties<Properties>();
+  props.operandSegmentSizes = {1, static_cast<int>(dynamic_sizes.size()),
+                               static_cast<int>(dynamic_strides.size())};
+
+  const auto memory_space = state.attributes.erase("memory_space");
+  if (result_type.getShape() != static_sizes.asArrayRef()) {
+    return parser.emitError(type_loc, "sizes do not match");
+  }
+  if (result_type.getMemorySpace() != memory_space) {
+    return parser.emitError(type_loc, "memory_space does not match");
+  }
+
+  SmallVector<int64_t> strides;
+  int64_t offset;
+  if (failed(result_type.getStridesAndOffset(strides, offset)) || offset != 0) {
+    return parser.emitError(type_loc, "invalid layout");
+  }
+  if (strides != static_strides.asArrayRef()) {
+    return parser.emitError(type_loc, "strides do not match");
+  }
+
+  return success();
+}
+
+void ConstructMemoryViewOp::print(OpAsmPrinter& printer) {
+  // ssa-id
+  printer << " " << getOffset();
+
+  // `,` `sizes````:` `[` [ssa-id | int] { `,` (ssa-id | int) } `]`
+  printer << ", sizes: ";
+  printDynamicIndexList(printer, *this, getDynamicSizes(),
+                        getType().getShape());
+
+  // `,` `strides````:` `[` [ssa-id | int] { `,` (ssa-id | int) } `]`
+  printer << ", strides: ";
+  const auto [strides, offset] = getType().getStridesAndOffset();
+  printDynamicIndexList(printer, *this, getDynamicStrides(), strides);
+
+  // attr-dict
+  printer.printOptionalAttrDict((*this)->getRawDictionaryAttrs().getValue());
+
+  // `:` type($result)
+  printer << " : " << getType();
+}
+
 mlir::Value ConstructMemoryViewOp::getViewSource() { return getOffset(); }
 
 LogicalResult ConstructMemoryViewOp::verify() {
-  unsigned nDims = getStaticSizes().size();
-  if (getStaticStrides().size() != nDims)
-    return emitOpError("static_sizes and static_strides must have equal length");
-  unsigned dynSizes = llvm::count(getStaticSizes(), ShapedType::kDynamic);
-  unsigned dynStrides = llvm::count(getStaticStrides(), ShapedType::kDynamic);
-  if (getSizes().size() != dynSizes)
-    return emitOpError("number of dynamic size operands does not match kDynamic entries in static_sizes");
-  if (getStrides().size() != dynStrides)
-    return emitOpError("number of dynamic stride operands does not match kDynamic entries in static_strides");
-  auto memrefType = dyn_cast<MemRefType>(getResult().getType());
-  if (!memrefType)
-    return emitOpError("result must be a memref type");
-  if (memrefType.getRank() != static_cast<int64_t>(nDims))
-    return emitOpError("result memref rank does not match sizes/strides length");
+  const auto result_type = getType();
+  if (getDynamicSizes().size() != result_type.getNumDynamicDims()) {
+    return emitOpError(
+        "number of dynamic size operands does not match kDynamic entries in "
+        "static_sizes");
+  }
+
+  SmallVector<int64_t> strides;
+  int64_t offset;
+  if (failed(result_type.getStridesAndOffset(strides, offset)) || offset != 0) {
+    return emitOpError("invalid memref layout");
+  }
+  const auto expected_dyn_strides =
+      static_cast<size_t>(llvm::count(strides, ShapedType::kDynamic));
+  if (expected_dyn_strides != getDynamicStrides().size()) {
+    return emitOpError(
+        "number of dynamic stride operands does not match kDynamic entries in "
+        "static_strides");
+  }
+
   return success();
 }
 
@@ -1083,16 +1190,16 @@ LogicalResult ConstructMemoryViewOp::verify() {
 
 LogicalResult ConstructDistributedMemoryViewOp::verify() {
   auto resultType = dyn_cast<MemRefType>(getResult().getType());
-  if (!resultType)
-    return emitOpError("result must be a memref type");
+  if (!resultType) return emitOpError("result must be a memref type");
   for (auto memref : getMemrefs()) {
     auto mType = dyn_cast<MemRefType>(memref.getType());
-    if (!mType)
-      return emitOpError("all inputs must be memref types");
+    if (!mType) return emitOpError("all inputs must be memref types");
     if (mType.getElementType() != resultType.getElementType())
-      return emitOpError("all input memrefs must have the same element type as the result");
+      return emitOpError(
+          "all input memrefs must have the same element type as the result");
     if (mType.getRank() != resultType.getRank())
-      return emitOpError("all input memrefs must have the same rank as the result");
+      return emitOpError(
+          "all input memrefs must have the same rank as the result");
   }
   return success();
 }
@@ -1116,8 +1223,7 @@ void LoadOp::build(OpBuilder& builder, OperationState& result, Value accessTile,
 LogicalResult LoadOp::verify() {
   auto tileType = mlir::cast<AccessTileType>(getAccessTile().getType());
   auto tensorType = dyn_cast<RankedTensorType>(getResult().getType());
-  if (!tensorType)
-    return emitOpError("result must be a ranked tensor");
+  if (!tensorType) return emitOpError("result must be a ranked tensor");
   if (tileType.getShape() != tensorType.getShape())
     return emitOpError("access tile shape must match result tensor shape");
   return success();
@@ -1130,8 +1236,7 @@ LogicalResult LoadOp::verify() {
 LogicalResult StoreOp::verify() {
   auto tileType = mlir::cast<AccessTileType>(getAccessTile().getType());
   auto tensorType = dyn_cast<RankedTensorType>(getDataTile().getType());
-  if (!tensorType)
-    return emitOpError("data_tile must be a ranked tensor");
+  if (!tensorType) return emitOpError("data_tile must be a ranked tensor");
   if (tileType.getShape() != tensorType.getShape())
     return emitOpError("data tile shape must match access tile shape");
   return success();
@@ -1142,13 +1247,15 @@ LogicalResult StoreOp::verify() {
 //===----------------------------------------------------------------------===//
 
 void LoadOp::getEffects(
-    SmallVectorImpl<SideEffects::EffectInstance<MemoryEffects::Effect>> &effects) {
+    SmallVectorImpl<SideEffects::EffectInstance<MemoryEffects::Effect>>&
+        effects) {
   effects.emplace_back(MemoryEffects::Read::get(),
                        SideEffects::DefaultResource::get());
 }
 
 void StoreOp::getEffects(
-    SmallVectorImpl<SideEffects::EffectInstance<MemoryEffects::Effect>> &effects) {
+    SmallVectorImpl<SideEffects::EffectInstance<MemoryEffects::Effect>>&
+        effects) {
   effects.emplace_back(MemoryEffects::Write::get(),
                        SideEffects::DefaultResource::get());
 }
@@ -1157,7 +1264,7 @@ void StoreOp::getEffects(
 // RuntimeArgExtractOp
 //===----------------------------------------------------------------------===//
 
-void RuntimeArgExtractOp::build(OpBuilder &builder, OperationState &result,
+void RuntimeArgExtractOp::build(OpBuilder& builder, OperationState& result,
                                 RuntimeArgExtractKind kind, Value input) {
   auto inputType = mlir::cast<RuntimeArgType>(input.getType());
   Type resultType;
@@ -1192,7 +1299,8 @@ LogicalResult RuntimeArgExtractOp::verify() {
     case RuntimeArgExtractKind::granularity:
       if (!inputType.getGranularity().has_value()) {
         return emitOpError(
-            "cannot extract granularity from runtime_arg that doesn't have one");
+            "cannot extract granularity from runtime_arg that doesn't have "
+            "one");
       }
       if (!resultType.isIndex()) {
         return emitOpError(
@@ -1229,11 +1337,9 @@ LogicalResult RuntimeArgExtractOp::verify() {
 // Syntax:
 
 LogicalResult InterTileProduceOp::verify() {
-
   // Producer region: one block, single `index` group-id argument.
   Block& block = getBody().front();
-  if (block.getNumArguments() != 1 ||
-      !block.getArgument(0).getType().isIndex())
+  if (block.getNumArguments() != 1 || !block.getArgument(0).getType().isIndex())
     return emitOpError(
         "producer region must take a single `index` group-id argument");
 
@@ -1245,8 +1351,9 @@ LogicalResult InterTileProduceOp::verify() {
   if (groupsSet.getNumDims() != 1)
     return emitOpError("`groups` integer set must have a single dimension (g)");
   if (producerSet.getNumSymbols() != 1)
-    return emitOpError("`producer_tiles_per_group` must have exactly one symbol "
-                       "(the group index g)");
+    return emitOpError(
+        "`producer_tiles_per_group` must have exactly one symbol "
+        "(the group index g)");
 
   // Disjointness invariant (§2.1): producer tile sets for distinct groups must
   // not overlap. Enumeration check -- requires statically bounded groups and
@@ -1315,8 +1422,9 @@ LogicalResult InterTileReduceOp::verify() {
   // Local structural checks on the consumer set attribute.
   IntegerSet consumerSet = getConsumerTilesPerGroup().getValue();
   if (consumerSet.getNumSymbols() != 1)
-    return emitOpError("`consumer_tiles_per_group` must have exactly one "
-                       "symbol (the group index g)");
+    return emitOpError(
+        "`consumer_tiles_per_group` must have exactly one "
+        "symbol (the group index g)");
 
   return success();
 }
@@ -1334,8 +1442,8 @@ LogicalResult InterTileReduceOp::verifyRegions() {
   for (auto [i, val] : llvm::enumerate(yield.getValues()))
     if (val.getType() != partials[i])
       return emitOpError("yield_reduced operand #")
-             << i << " type " << val.getType()
-             << " must match partial type " << partials[i];
+             << i << " type " << val.getType() << " must match partial type "
+             << partials[i];
 
   return success();
 }

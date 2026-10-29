@@ -41,7 +41,7 @@ func.func @bad_distributed_rank(%a: memref<32x64xf16>, %b: memref<64xf16>) -> me
 // Verify: construct_memory_view rank mismatch
 #set_rank = affine_set<(d0, d1) : (d0 >= 0, -d0 + 31 >= 0, d1 >= 0, -d1 + 63 >= 0)>
 func.func @bad_memory_view_rank(%addr: index) -> memref<32x64x8xf16> {
-  // expected-error @below {{'ktdp.construct_memory_view' op result memref rank does not match sizes/strides length}}
+  // expected-error @below {{'ktdp.construct_memory_view' op sizes do not match}}
   %view = ktdp.construct_memory_view %addr, sizes: [32, 64], strides: [64, 1] {
     coordinate_set = #set_rank, memory_space = #ktdp.memory_space<global>
   } : memref<32x64x8xf16>

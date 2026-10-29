@@ -326,22 +326,12 @@ def KTDP_ConstructMemoryViewOp : Ktdp_Op<"construct_memory_view", [
     }];
 
   let arguments = (ins Index:$offset,
-                       Variadic<Index>:$sizes,
-                       Variadic<Index>:$strides,
-                       DenseI64ArrayAttr:$static_sizes,
-                       DenseI64ArrayAttr:$static_strides,
-                       Ktdp_MemorySpaceAttr:$memory_space,
+                       Variadic<Index>:$dynamic_sizes,
+                       Variadic<Index>:$dynamic_strides,
                        Builtin_IntegerSetAttr:$coordinate_set);
   let results = (outs AnyMemRef:$result);
 
-  let assemblyFormat = [{
-    $offset `` `,`  `sizes` `` `:`
-    custom<DynamicIndexList>($sizes, $static_sizes)
-    `` `,` `strides` `` `:`
-    custom<DynamicIndexList>($strides, $static_strides)
-    attr-dict `:` type($result)
-  }];
-
+  let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
 }
 

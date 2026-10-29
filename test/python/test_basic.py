@@ -53,11 +53,11 @@ module {
     %A_view = ktdp.construct_memory_view %A_addr, sizes: [32, 64], strides: [64, 1] {
                   coordinate_set = #set,
                   memory_space   = #ktdp.memory_space<global>
-              } : memref<32x64xf16>
+              } : memref<32x64xf16, #ktdp.memory_space<global>>
     %A_tile = ktdp.construct_access_tile %A_view[%c0, %c0] {
                   access_tile_set   = #set,
                   access_tile_order = #identity
-              } : memref<32x64xf16> -> !ktdp.access_tile<32x64xindex>
+              } : memref<32x64xf16, #ktdp.memory_space<global>> -> !ktdp.access_tile<32x64xindex>
     %data   = ktdp.load %A_tile : !ktdp.access_tile<32x64xindex> -> tensor<32x64xf16>
     ktdp.store %data, %A_tile : tensor<32x64xf16>, !ktdp.access_tile<32x64xindex>
     return

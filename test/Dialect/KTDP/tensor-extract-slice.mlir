@@ -47,25 +47,25 @@ module {
     %A_view = ktdp.construct_memory_view %A_start_address, sizes: [96, 64], strides: [64, 1] {
         coordinate_set = affine_set<(d0, d1) : (d0 >= 0, -d0 + 95 >= 0, d1 >= 0, -d1 + 63 >= 0)>,
         memory_space = #ktdp.memory_space<global>
-    } : memref<96x64xf16>
+    } : memref<96x64xf16, #ktdp.memory_space<global>>
 
     // Construct an access tile set from the memory view of A
     %A_access_tile = ktdp.construct_access_tile %A_view[%start_row, %c0] {
         access_tile_set = affine_set<(d0, d1) : (d0 >= 0, -d0 + 2 >= 0, d1 >= 0, -d1 + 63 >= 0)>,
         access_tile_order = affine_map<(d0, d1) -> (d0, d1)>
-    } : memref<96x64xf16> -> !ktdp.access_tile<3x64xindex>
+    } : memref<96x64xf16, #ktdp.memory_space<global>> -> !ktdp.access_tile<3x64xindex>
 
     // Construct a memory view of B from a given address
     %B_view = ktdp.construct_memory_view %B_start_address, sizes: [96, 64], strides: [64, 1] {
         coordinate_set = affine_set<(d0, d1) : (d0 >= 0, -d0 + 95 >= 0, d1 >= 0, -d1 + 63 >= 0)>,
         memory_space = #ktdp.memory_space<global>
-    } : memref<96x64xf16>
+    } : memref<96x64xf16, #ktdp.memory_space<global>>
 
     // Construct an access tile set from the memory view of B
     %B_access_tile = ktdp.construct_access_tile %B_view[%start_row, %c0] {
         access_tile_set = affine_set<(d0, d1) : (d0 >= 0, -d0 + 2 >= 0, d1 >= 0, -d1 + 63 >= 0)>,
         access_tile_order = affine_map<(d0, d1) -> (d0, d1)>
-    } : memref<96x64xf16> -> !ktdp.access_tile<3x64xindex>
+    } : memref<96x64xf16, #ktdp.memory_space<global>> -> !ktdp.access_tile<3x64xindex>
 
     // Load data from the corresponding access tile
     %A_data_tile = ktdp.load %A_access_tile : !ktdp.access_tile<3x64xindex> -> tensor<3x64xf16>
@@ -85,13 +85,13 @@ module {
     %C_view = ktdp.construct_memory_view %C_start_address, sizes: [96, 64], strides: [64, 1] {
         coordinate_set = affine_set<(d0, d1) : (d0 >= 0, -d0 + 95 >= 0, d1 >= 0, -d1 + 63 >= 0)>,
         memory_space = #ktdp.memory_space<global>
-    } : memref<96x64xf16>
+    } : memref<96x64xf16, #ktdp.memory_space<global>>
 
     // Construct an access tile set from the memory view of C
     %C_access_tile = ktdp.construct_access_tile %C_view[%start_row, %c0] {
         access_tile_set = affine_set<(d0, d1) : (d0 >= 0, -d0 + 1 >= 0, d1 >= 0, -d1 + 63 >= 0)>,
         access_tile_order = affine_map<(d0, d1) -> (d0, d1)>
-    } : memref<96x64xf16> -> !ktdp.access_tile<1x64xindex>
+    } : memref<96x64xf16, #ktdp.memory_space<global>> -> !ktdp.access_tile<1x64xindex>
 
     // Store data into the access tile.
     ktdp.store %C_data_subtile, %C_access_tile : tensor<1x64xf16>, !ktdp.access_tile<1x64xindex>
